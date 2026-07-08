@@ -12,22 +12,33 @@ conn.close()
 if df.empty:
     st.info("No incoming data lines to manage.")
 else:
-    # Staff Mapping Section
     st.markdown("### 📍 Verification Status Map Tracking")
     st.caption("Color maps active task standing. Ensure 'Pending' nodes are verified quickly.")
+    
+    # Dynamic center calculation for staff view
+    avg_lat = df["latitude"].mean()
+    avg_lon = df["longitude"].mean()
     
     fig_staff_map = px.scatter_mapbox(
         df,
         lat="latitude",
         lon="longitude",
-        color="status",  # Grouped by status to assist deployment workflows
+        color="status",  
         hover_name="id",
         hover_data=["category", "urgency_score", "summary"],
         zoom=11,
         height=400,
         color_discrete_map={"Pending": "red", "Verified": "orange", "Resolved": "green"}
     )
-    fig_staff_map.update_layout(mapbox_style="open-street-map", margin={"r":0,"t":0,"l":0,"b":0})
+    
+    # Snap staff view map straight onto active target area
+    fig_staff_map.update_layout(
+        mapbox_style="open-street-map", 
+        mapbox=dict(
+            center=dict(lat=avg_lat, lon=avg_lon)
+        ),
+        margin={"r":0,"t":0,"l":0,"b":0}
+    )
     st.plotly_chart(fig_staff_map, use_container_width=True)
 
     st.markdown("### 📝 Edit Operational State Metrics")
