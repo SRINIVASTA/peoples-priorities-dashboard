@@ -1,29 +1,26 @@
 import streamlit as st
 import sqlite3
 
-# Set page layout to widescreen
 st.set_page_config(
     page_title="People's Priorities Dashboard",
     page_icon="🏛️",
     layout="wide"
 )
 
-# 1. Secure Password Key Input Frame inside Sidebar
 with st.sidebar:
     st.markdown("### 🔑 Authentication")
     user_key = st.text_input(
         "Enter your Gemini API Key:", 
-        type="password",  # Hides your key behind bullet points
-        placeholder=""    # Kept completely blank as requested
+        type="password",  
+        placeholder=""    
     )
-    
     if user_key:
         st.session_state["TEMPORARY_GEMINI_KEY"] = user_key
         st.success("API Key loaded into active memory!")
     else:
         st.warning("Running in Offline Demo mode. Enter key to activate live AI.")
 
-# 2. Initialize Local Serverless Database file
+# Initialize Local Serverless Database file with Lat/Lon fields
 conn = sqlite3.connect("peoples_priorities.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
@@ -32,13 +29,14 @@ cursor.execute("""
         category TEXT,
         urgency_score INTEGER,
         summary TEXT,
-        status TEXT
+        status TEXT,
+        latitude REAL,
+        longitude REAL
     )
 """)
 conn.commit()
 conn.close()
 
-# 3. Setup Multi-Page Navigation 
 pages = {
     "For Citizens": [
         st.Page("views/citizen_chat.py", title="🗣️ Report an Issue", icon="💬")
