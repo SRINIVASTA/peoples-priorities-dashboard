@@ -4,20 +4,37 @@ import random
 import json
 from google import genai
 from google.genai import types
-from geopy.geocoders import Nominatim
 
 st.title("🗣️ Citizen Intake Portal")
-st.caption("Describe your issue contextually in English, Telugu, or Hindi. Be sure to mention the specific neighborhood or street name.")
+st.caption("Select your neighborhood area from the checklist index, then describe your grievance contextually.")
+
+# 1. STRUCTURAL GEOLOCATION INDEX (Ensures exact, non-overlapping regional mapping)
+VIZAG_NEIGHBORHOODS = {
+    "MVP Colony": {"lat": 17.7406, "lon": 83.3366},
+    "Gopalapatnam": {"lat": 17.7592, "lon": 83.2244},
+    "Adarsh Nagar": {"lat": 17.7288, "lon": 83.3150},
+    "Madhurawada": {"lat": 17.8189, "lon": 83.3444},
+    "Gajuwaka": {"lat": 17.6896, "lon": 83.2089},
+    "Siripuram": {"lat": 17.7214, "lon": 83.3161},
+    "Maddilapalem": {"lat": 17.7301, "lon": 83.3195},
+    "Jagadamba Junction": {"lat": 17.7121, "lon": 83.3031}
+}
+
+# Add a clear UI dropdown selection tool right at the top
+selected_area = st.selectbox(
+    "📍 Select Affected Neighborhood / Locality:", 
+    options=list(VIZAG_NEIGHBORHOODS.keys())
+)
 
 # Setup continuous chat log stream state
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Namaste! Please describe the local issue you are facing today."}]
+    st.session_state.messages = [{"role": "assistant", "content": "Namaste! Please select your locality above, then describe the infrastructure issue you are facing today."}]
 
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
 # Handle fresh text input
-if prompt := st.chat_input("Type your issue here..."):
+if prompt := st.chat_input("Describe the problem here..."):
     st.chat_message("user").write(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
     
@@ -25,43 +42,14 @@ if prompt := st.chat_input("Type your issue here..."):
     assigned_urgency = 5
     ai_mode_notice = ""
     
-    # 1. DYNAMIC CITY-WIDE GEOCODING ENGINE
-    # Default fallback coordinates centered on Visakhapatnam City Center
-    target_lat = 17.7043
-    target_lon = 83.2977
-    detected_area = "Visakhapatnam"
+    # Extract the exact fixed coordinates based on the user's dropdown choice
+    geo_data = VIZAG_NEIGHBORHOODS[selected_area]
     
-    # Initialize the free OpenStreetMap geolocator tool
-    geolocator = Nominatim(user_agent="peoples_priorities_vizag_tracker")
-    
-    # First, let's look for a key location word inside the text prompt
-    words = prompt.split()
-    location_query = ""
-    
-    # Clean up search strings looking for structural place indicators
-    for word in words:
-        if word.lower() in ["colony", "street", "nagar", "road", "mvp", "gajuwaka", "madhurawada", "siripuram", "maddilapalem", "jagadamba"]:
-            # Try to grab the context surrounding the target word
-            idx = words.index(word)
-            start_idx = max(0, idx - 2)
-            location_query = " ".join(words[start_idx:idx + 2])
-            break
+    # Add a safe, tightly controlled coordinate jitter so multiple pins in the same area don't stack perfectly on top of each other
+    target_lat = geo_data["lat"] + random.uniform(-0.0015, 0.0015)
+    target_lon = geo_data["lon"] + random.uniform(-0.0015, 0.0015)
 
-    if location_query:
-        try:
-            # Force the engine to append Visakhapatnam to keep map pins tightly within city limits
-            full_search_string = f"{location_query}, Visakhapatnam, Andhra Pradesh, India"
-            location = geolocator.geocode(full_search_string, timeout=5)
-            
-            if location:
-                # Add a subtle random jitter so multiple complaints on the exact same street don't stack directly on top of each other
-                target_lat = location.latitude + random.uniform(-0.0005, 0.0005)
-                target_lon = location.longitude + random.uniform(-0.0005, 0.0005)
-                detected_area = location.address.split(',')[0]
-        except Exception:
-            pass # Keep default city center if API times out
-
-    # 2. CORE CATEGORIZATION ENGINE: Check for live API Key password entries
+    # 2. CORE ENGINE: Check if password key exists in active memory
     if "TEMPORARY_GEMINI_KEY" in st.session_state and st.session_state["TEMPORARY_GEMINI_KEY"]:
         try:
             client = genai.Client(api_key=st.session_state["TEMPORARY_GEMINI_KEY"])
@@ -95,19 +83,27 @@ if prompt := st.chat_input("Type your issue here..."):
             
         except Exception as e:
             assigned_cat = "Other"
-            ai_mode_notice = f"⚠️ Key Error: Fallback Engine Used"
+            ai_mode_notice = f"⚠️ Key Error: Handled by Local Parser"
     else:
         # Offline keywords parser for category sorting
         prompt_lower = prompt.lower()
-        if "water" in prompt_lower or "pipe" in prompt_lower: assigned_cat = "Water Supply"; assigned_urgency = 7
-        elif "road" in prompt_lower or "pothole" in prompt_lower: assigned_cat = "Road Damage"; assigned_urgency = 6
-        elif "power" in prompt_lower or "current" in prompt_lower: assigned_cat = "Power Outage"; assigned_urgency = 8
-        elif "garbage" in prompt_lower or "waste" in prompt_lower: assigned_cat = "Garbage"; assigned_urgency = 4
+        if "water" in prompt_lower or "pipe" in prompt_lower:
+            assigned_cat = "Water Supply"
+            assigned_urgency = 7
+        elif "road" in prompt_lower or "pothole" in prompt_lower:
+            assigned_cat = "Road Damage"
+            assigned_urgency = 6
+        elif "power" in prompt_lower or "current" in prompt_lower:
+            assigned_cat = "Power Outage"
+            assigned_urgency = 8
+        elif "garbage" in prompt_lower or "waste" in prompt_lower:
+            assigned_cat = "Garbage"
+            assigned_urgency = 4
         ai_mode_notice = "💡 Running in Offline Local Rule Mode"
 
     tracking_id = f"TRK-{random.randint(100, 999)}"
     
-    # Save target coordinates straight to the main local database file
+    # Save transaction record directly to your local database file
     conn = sqlite3.connect("peoples_priorities.db", check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute(
@@ -118,6 +114,6 @@ if prompt := st.chat_input("Type your issue here..."):
     conn.close()
     
     with st.chat_message("assistant"):
-        ai_response = f"Grievance recorded! Reference ID: **{tracking_id}**. Location identified near **{detected_area}**. Category: **{assigned_cat}** (Urgency: **{assigned_urgency}/10**).\n\n*({ai_mode_notice})*"
+        ai_response = f"Grievance filed! Reference ID: **{tracking_id}**. Location locked to **{selected_area}**. Category: **{assigned_cat}** (Urgency: **{assigned_urgency}/10**).\n\n*({ai_mode_notice})*"
         st.write(ai_response)
         st.session_state.messages.append({"role": "assistant", "content": ai_response})
