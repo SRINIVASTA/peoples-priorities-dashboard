@@ -8,19 +8,20 @@ st.set_page_config(
     layout="wide"
 )
 
-# Render a clean sidebar key input and data manager frame
+# 1. Secure Password Key Input Frame inside Sidebar
 with st.sidebar:
     st.markdown("### 🔑 Authentication")
     user_key = st.text_input(
         "Enter your Gemini API Key:", 
-        type="password",  
-        placeholder=""
+        type="password",  # Hides your key behind bullet points
+        placeholder=""    # Kept completely blank as requested
     )
+    
     if user_key:
         st.session_state["TEMPORARY_GEMINI_KEY"] = user_key
-        st.success("API Key loaded into memory!")
+        st.success("API Key loaded into active memory!")
     else:
-        st.warning("Please enter your key to activate AI features.")
+        st.warning("Running in Offline Demo mode. Enter key to activate live AI.")
 
     st.markdown("---")
     st.markdown("### ⚙️ System Tools")
@@ -39,7 +40,7 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"Reset Error: {str(e)}")
 
-# Initialize Local Serverless Database tables securely
+# 2. Initialize Local Serverless Database file with spatial data columns
 conn = sqlite3.connect("peoples_priorities.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
@@ -56,7 +57,7 @@ cursor.execute("""
 conn.commit()
 conn.close()
 
-# App Navigation Setup
+# 3. Setup Multi-Page Navigation 
 pages = {
     "For Citizens": [
         st.Page("views/citizen_chat.py", title="🗣️ Report an Issue", icon="💬")
