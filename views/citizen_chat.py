@@ -6,29 +6,68 @@ from google import genai
 from google.genai import types
 
 st.title("🗣️ Citizen Intake Portal")
-st.caption("Select your neighborhood area from the checklist index, then describe your grievance contextually.")
+st.caption("Select the specific street or neighborhood, then describe your grievance contextually.")
 
-# 1. STRUCTURAL GEOLOCATION INDEX (Ensures exact, non-overlapping regional mapping)
+# COMPLETE VISAKHAPATNAM GEOSPATIAL NEIGHBORHOOD INDEX
 VIZAG_NEIGHBORHOODS = {
-    "MVP Colony": {"lat": 17.7406, "lon": 83.3366},
-    "Gopalapatnam": {"lat": 17.7592, "lon": 83.2244},
+    # Central & Commercial Areas
+    "Dwaraka Nagar (Main Road)": {"lat": 17.7214, "lon": 83.3032},
+    "Daba Gardens (Jail Road)": {"lat": 17.7144, "lon": 83.2987},
+    "Asilmetta Junction": {"lat": 17.7226, "lon": 83.3072},
+    "Siripuram Junction": {"lat": 17.7214, "lon": 83.3161},
+    "Jagadamba Junction": {"lat": 17.7121, "lon": 83.3031},
+    "Suryabagh (Main Market)": {"lat": 17.7101, "lon": 83.2965},
+    "Ramnagar": {"lat": 17.7220, "lon": 83.3115},
+    
+    # Residential Hubs & Sectors
+    "MVP Colony (Sector 1-5)": {"lat": 17.7406, "lon": 83.3366},
+    "MVP Colony (Sector 6-12)": {"lat": 17.7452, "lon": 83.3321},
+    "Seethammadhara": {"lat": 17.7412, "lon": 83.3129},
+    "Maddilapalem (National Highway)": {"lat": 17.7301, "lon": 83.3195},
+    "Akkayyapalem Main Road": {"lat": 17.7285, "lon": 83.2944},
+    "Kancharapalem": {"lat": 17.7275, "lon": 83.2750},
+    "HB Colony": {"lat": 17.7485, "lon": 83.3210},
+    
+    # Northern Corridors
+    "Madhurawada (Sector 1)": {"lat": 17.8189, "lon": 83.3444},
+    "Madhurawada (Mithilapuri Colony)": {"lat": 17.8250, "lon": 83.3510},
+    "Arilova Health City Road": {"lat": 17.7645, "lon": 83.3130},
+    "Yendada": {"lat": 17.7812, "lon": 83.3482},
+    "Rushikonda Beach Road": {"lat": 17.7820, "lon": 83.3835},
+    
+    # Western & Suburban Corridors
+    "Gopalapatnam Main Road": {"lat": 17.7592, "lon": 83.2244},
+    "Pendurthi Junction": {"lat": 17.8080, "lon": 83.2215},
+    "Simhachalam Hill Down": {"lat": 17.7662, "lon": 83.2505},
     "Adarsh Nagar": {"lat": 17.7288, "lon": 83.3150},
-    "Madhurawada": {"lat": 17.8189, "lon": 83.3444},
-    "Gajuwaka": {"lat": 17.6896, "lon": 83.2089},
-    "Siripuram": {"lat": 17.7214, "lon": 83.3161},
-    "Maddilapalem": {"lat": 17.7301, "lon": 83.3195},
-    "Jagadamba Junction": {"lat": 17.7121, "lon": 83.3031}
+    "Madhavadhara": {"lat": 17.7471, "lon": 83.2544},
+    
+    # Industrial & Southern Corridors
+    "Gajuwaka Junction": {"lat": 17.6896, "lon": 83.2089},
+    "Auto Nagar Industrial Estate": {"lat": 17.6750, "lon": 83.1920},
+    "Kurmannapalem Junction": {"lat": 17.6712, "lon": 83.1610},
+    "Aganampudi Highway Section": {"lat": 17.6625, "lon": 83.1340},
+    "Steel Plant Township": {"lat": 17.6350, "lon": 83.1590},
+    "Pedagantyada": {"lat": 17.6640, "lon": 83.2149},
+    
+    # Coastal & Waltair Lines
+    "Beach Road (RK Beach Area)": {"lat": 17.7142, "lon": 83.3245},
+    "Chinna Waltair": {"lat": 17.7225, "lon": 83.3320},
+    "Pedda Waltair": {"lat": 17.7310, "lon": 83.3415},
+    "Daspalla Hills": {"lat": 17.7125, "lon": 83.3170}
 }
 
-# Add a clear UI dropdown selection tool right at the top
+# Group neighborhoods by zones to make choices clear and easy to navigate
+sorted_neighborhoods = sorted(list(VIZAG_NEIGHBORHOODS.keys()))
+
 selected_area = st.selectbox(
-    "📍 Select Affected Neighborhood / Locality:", 
-    options=list(VIZAG_NEIGHBORHOODS.keys())
+    "📍 Select Affected Street Location / Ward Corridor:", 
+    options=sorted_neighborhoods
 )
 
 # Setup continuous chat log stream state
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Namaste! Please select your locality above, then describe the infrastructure issue you are facing today."}]
+    st.session_state.messages = [{"role": "assistant", "content": "Namaste! Please select your precise locality from the index box above, then describe the issue."}]
 
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
@@ -42,14 +81,14 @@ if prompt := st.chat_input("Describe the problem here..."):
     assigned_urgency = 5
     ai_mode_notice = ""
     
-    # Extract the exact fixed coordinates based on the user's dropdown choice
+    # Read the explicit coordinates straight out of the selection configuration data block
     geo_data = VIZAG_NEIGHBORHOODS[selected_area]
     
-    # Add a safe, tightly controlled coordinate jitter so multiple pins in the same area don't stack perfectly on top of each other
-    target_lat = geo_data["lat"] + random.uniform(-0.0015, 0.0015)
-    target_lon = geo_data["lon"] + random.uniform(-0.0015, 0.0015)
+    # Subtle random coordinate jitter prevents multiple pins at the exact same location from stacking perfectly
+    target_lat = geo_data["lat"] + random.uniform(-0.0008, 0.0008)
+    target_lon = geo_data["lon"] + random.uniform(-0.0008, 0.0008)
 
-    # 2. CORE ENGINE: Check if password key exists in active memory
+    # Check if password key exists in active memory
     if "TEMPORARY_GEMINI_KEY" in st.session_state and st.session_state["TEMPORARY_GEMINI_KEY"]:
         try:
             client = genai.Client(api_key=st.session_state["TEMPORARY_GEMINI_KEY"])
@@ -83,27 +122,19 @@ if prompt := st.chat_input("Describe the problem here..."):
             
         except Exception as e:
             assigned_cat = "Other"
-            ai_mode_notice = f"⚠️ Key Error: Handled by Local Parser"
+            ai_mode_notice = f"⚠️ Key Error: Handled by Fallback Parser"
     else:
         # Offline keywords parser for category sorting
         prompt_lower = prompt.lower()
-        if "water" in prompt_lower or "pipe" in prompt_lower:
-            assigned_cat = "Water Supply"
-            assigned_urgency = 7
-        elif "road" in prompt_lower or "pothole" in prompt_lower:
-            assigned_cat = "Road Damage"
-            assigned_urgency = 6
-        elif "power" in prompt_lower or "current" in prompt_lower:
-            assigned_cat = "Power Outage"
-            assigned_urgency = 8
-        elif "garbage" in prompt_lower or "waste" in prompt_lower:
-            assigned_cat = "Garbage"
-            assigned_urgency = 4
+        if "water" in prompt_lower or "pipe" in prompt_lower: assigned_cat = "Water Supply"; assigned_urgency = 7
+        elif "road" in prompt_lower or "pothole" in prompt_lower: assigned_cat = "Road Damage"; assigned_urgency = 6
+        elif "power" in prompt_lower or "current" in prompt_lower: assigned_cat = "Power Outage"; assigned_urgency = 8
+        elif "garbage" in prompt_lower or "waste" in prompt_lower: assigned_cat = "Garbage"; assigned_urgency = 4
         ai_mode_notice = "💡 Running in Offline Local Rule Mode"
 
     tracking_id = f"TRK-{random.randint(100, 999)}"
     
-    # Save transaction record directly to your local database file
+    # Save clean record transaction directly to your local database file
     conn = sqlite3.connect("peoples_priorities.db", check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute(
@@ -114,6 +145,6 @@ if prompt := st.chat_input("Describe the problem here..."):
     conn.close()
     
     with st.chat_message("assistant"):
-        ai_response = f"Grievance filed! Reference ID: **{tracking_id}**. Location locked to **{selected_area}**. Category: **{assigned_cat}** (Urgency: **{assigned_urgency}/10**).\n\n*({ai_mode_notice})*"
+        ai_response = f"Grievance recorded! Reference ID: **{tracking_id}**. Location locked to **{selected_area}**. Category: **{assigned_cat}** (Urgency: **{assigned_urgency}/10**).\n\n*({ai_mode_notice})*"
         st.write(ai_response)
         st.session_state.messages.append({"role": "assistant", "content": ai_response})
