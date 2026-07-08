@@ -4,9 +4,10 @@ import random
 import json
 from google import genai
 from google.genai import types
+from geopy.geocoders import Nominatim
 
 st.title("🗣️ Citizen Intake Portal")
-st.caption("Describe your issue contextually in English, Telugu, or Hindi. No formal forms required.")
+st.caption("Describe your issue contextually in English, Telugu, or Hindi. Be sure to mention the specific neighborhood or street name.")
 
 # Setup continuous chat log stream state
 if "messages" not in st.session_state:
@@ -24,33 +25,45 @@ if prompt := st.chat_input("Type your issue here..."):
     assigned_urgency = 5
     ai_mode_notice = ""
     
-    # 1. PRIORITY GEOLOCATION EXTRACTOR (Extract neighborhood first)
-    target_lat = 17.7406   # Default center point (MVP Colony)
-    target_lon = 83.3366
+    # 1. DYNAMIC CITY-WIDE GEOCODING ENGINE
+    # Default fallback coordinates centered on Visakhapatnam City Center
+    target_lat = 17.7043
+    target_lon = 83.2977
     detected_area = "Visakhapatnam"
     
-    prompt_lower = prompt.lower()
-    if "mvp" in prompt_lower or "colony" in prompt_lower:
-        target_lat = 17.7406 + random.uniform(-0.002, 0.002) # Subtle jitter prevents overlapping map pins
-        target_lon = 83.3366 + random.uniform(-0.002, 0.002)
-        detected_area = "MVP Colony"
-    elif "madhurawada" in prompt_lower:
-        target_lat = 17.8189 + random.uniform(-0.002, 0.002)
-        target_lon = 83.3444 + random.uniform(-0.002, 0.002)
-        detected_area = "Madhurawada"
-    elif "gajuwaka" in prompt_lower:
-        target_lat = 17.6896 + random.uniform(-0.002, 0.002)
-        target_lon = 83.2089 + random.uniform(-0.002, 0.002)
-        detected_area = "Gajuwaka"
-    else:
-        target_lat = 17.7406 + random.uniform(-0.01, 0.01)
-        target_lon = 83.3366 + random.uniform(-0.01, 0.01)
-        detected_area = "General Area"
+    # Initialize the free OpenStreetMap geolocator tool
+    geolocator = Nominatim(user_agent="peoples_priorities_vizag_tracker")
+    
+    # First, let's look for a key location word inside the text prompt
+    words = prompt.split()
+    location_query = ""
+    
+    # Clean up search strings looking for structural place indicators
+    for word in words:
+        if word.lower() in ["colony", "street", "nagar", "road", "mvp", "gajuwaka", "madhurawada", "siripuram", "maddilapalem", "jagadamba"]:
+            # Try to grab the context surrounding the target word
+            idx = words.index(word)
+            start_idx = max(0, idx - 2)
+            location_query = " ".join(words[start_idx:idx + 2])
+            break
 
-    # 2. CORE ENGINE: Check if password key exists in active memory
+    if location_query:
+        try:
+            # Force the engine to append Visakhapatnam to keep map pins tightly within city limits
+            full_search_string = f"{location_query}, Visakhapatnam, Andhra Pradesh, India"
+            location = geolocator.geocode(full_search_string, timeout=5)
+            
+            if location:
+                # Add a subtle random jitter so multiple complaints on the exact same street don't stack directly on top of each other
+                target_lat = location.latitude + random.uniform(-0.0005, 0.0005)
+                target_lon = location.longitude + random.uniform(-0.0005, 0.0005)
+                detected_area = location.address.split(',')[0]
+        except Exception:
+            pass # Keep default city center if API times out
+
+    # 2. CORE CATEGORIZATION ENGINE: Check for live API Key password entries
     if "TEMPORARY_GEMINI_KEY" in st.session_state and st.session_state["TEMPORARY_GEMINI_KEY"]:
         try:
-            # Initialize live client with the temporary password string
             client = genai.Client(api_key=st.session_state["TEMPORARY_GEMINI_KEY"])
             
             analysis_prompt = f"""
@@ -59,7 +72,6 @@ if prompt := st.chat_input("Type your issue here..."):
             Assign an urgency score from 1 to 10 based on public safety risk.
             """
             
-            # Using structured schema constraints to force precise outputs
             response = client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=analysis_prompt,
@@ -82,33 +94,20 @@ if prompt := st.chat_input("Type your issue here..."):
             ai_mode_notice = "✨ Live Gemini AI Categorized"
             
         except Exception as e:
-            # Fallback categorization engine if key error occurs
-            if "water" in prompt_lower or "pipe" in prompt_lower: assigned_cat = "Water Supply"
-            elif "road" in prompt_lower or "pothole" in prompt_lower: assigned_cat = "Road Damage"
-            else: assigned_cat = "Other"
-            ai_mode_notice = f"⚠️ Key Error: Handled by Local Parser"
-    else:
-        # 3. OFFLINE CATEGORIZATION RULES ENGINE (Runs second to prevent geo-overwrite)
-        if "water" in prompt_lower or "pipe" in prompt_lower:
-            assigned_cat = "Water Supply"
-            assigned_urgency = 7
-        elif "road" in prompt_lower or "pothole" in prompt_lower:
-            assigned_cat = "Road Damage"
-            assigned_urgency = 6
-        elif "power" in prompt_lower or "current" in prompt_lower:
-            assigned_cat = "Power Outage"
-            assigned_urgency = 8
-        elif "garbage" in prompt_lower or "waste" in prompt_lower:
-            assigned_cat = "Garbage"
-            assigned_urgency = 4
-        else:
             assigned_cat = "Other"
-            assigned_urgency = 5
+            ai_mode_notice = f"⚠️ Key Error: Fallback Engine Used"
+    else:
+        # Offline keywords parser for category sorting
+        prompt_lower = prompt.lower()
+        if "water" in prompt_lower or "pipe" in prompt_lower: assigned_cat = "Water Supply"; assigned_urgency = 7
+        elif "road" in prompt_lower or "pothole" in prompt_lower: assigned_cat = "Road Damage"; assigned_urgency = 6
+        elif "power" in prompt_lower or "current" in prompt_lower: assigned_cat = "Power Outage"; assigned_urgency = 8
+        elif "garbage" in prompt_lower or "waste" in prompt_lower: assigned_cat = "Garbage"; assigned_urgency = 4
         ai_mode_notice = "💡 Running in Offline Local Rule Mode"
 
     tracking_id = f"TRK-{random.randint(100, 999)}"
     
-    # Save transaction record directly to your local database file
+    # Save target coordinates straight to the main local database file
     conn = sqlite3.connect("peoples_priorities.db", check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute(
@@ -119,6 +118,6 @@ if prompt := st.chat_input("Type your issue here..."):
     conn.close()
     
     with st.chat_message("assistant"):
-        ai_response = f"Grievance filed! Reference ID: **{tracking_id}**. Area Mapped: **{detected_area}**. Classified under **{assigned_cat}** with an Urgency rating of **{assigned_urgency}/10**.\n\n*({ai_mode_notice})*"
+        ai_response = f"Grievance recorded! Reference ID: **{tracking_id}**. Location identified near **{detected_area}**. Category: **{assigned_cat}** (Urgency: **{assigned_urgency}/10**).\n\n*({ai_mode_notice})*"
         st.write(ai_response)
         st.session_state.messages.append({"role": "assistant", "content": ai_response})
