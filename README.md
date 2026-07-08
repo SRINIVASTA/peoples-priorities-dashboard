@@ -43,7 +43,7 @@ peoples_priorities_app/
 ### 1. Clone the Workspace
 ```bash
 git clone https://github.com
-cd YOUR_REPO_NAME
+cd peoples-priorities-dashboard
 ```
 
 ### 2. Provision Dependencies
